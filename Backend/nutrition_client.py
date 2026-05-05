@@ -1,5 +1,6 @@
 import difflib
 import os
+import time
 
 try:
     import requests
@@ -10,10 +11,18 @@ except ImportError:
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("NUTRITION_HTTP_TIMEOUT", "4"))
 OPENFOODFACTS_PAGE_SIZE = int(os.getenv("OPENFOODFACTS_PAGE_SIZE", "5"))
 MIN_MATCH_CONFIDENCE = float(os.getenv("NUTRITION_MIN_MATCH_CONFIDENCE", "0.55"))
+OPENFOODFACTS_RETRIES = int(os.getenv("OPENFOODFACTS_RETRIES", "2"))
+OPENFOODFACTS_BACKOFF_SECONDS = float(os.getenv("OPENFOODFACTS_BACKOFF_SECONDS", "0.6"))
+USDA_RETRIES = int(os.getenv("USDA_RETRIES", "2"))
+USDA_BACKOFF_SECONDS = float(os.getenv("USDA_BACKOFF_SECONDS", "0.8"))
+USE_OPENFOODFACTS = os.getenv("USE_OPENFOODFACTS", "true").lower() == "false"
+USDA_API_KEY = os.getenv("USDA_API_KEY", "")
+USDA_API_URL = os.getenv("USDA_API_URL", "https://api.nal.usda.gov/fdc/v1/foods/search")
 
 
 # Simple in-memory cache
 CACHE = {}
+_OPENFOODFACTS_ERROR_LOGGED = set()
 
 
 # Fallback nutrition data (per 100g)
@@ -80,53 +89,132 @@ def normalize_name(name: str) -> str:
 
 
 def fetch_from_openfoodfacts(ingredient: str) -> dict | None:
+    if not USE_OPENFOODFACTS:
+        return None
     if requests is None:
         print("[NUTRITION ERROR][openfoodfacts]: requests dependency is not installed.")
         return None
 
-    try:
-        url = "https://world.openfoodfacts.org/cgi/search.pl"
-        params = {
-            "search_terms": ingredient,
-            "search_simple": 1,
-            "action": "process",
-            "json": 1,
-            "page_size": OPENFOODFACTS_PAGE_SIZE,
-        }
+    url = "https://world.openfoodfacts.org/cgi/search.pl"
+    params = {
+        "search_terms": ingredient,
+        "search_simple": 1,
+        "action": "process",
+        "json": 1,
+        "page_size": OPENFOODFACTS_PAGE_SIZE,
+    }
+    headers = {
+        "User-Agent": "PCOS-Meal-Planner/1.0 (local dev)",
+        "Accept": "application/json",
+    }
 
-        response = requests.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
-        response.raise_for_status()
-        data = response.json()
+    for attempt in range(OPENFOODFACTS_RETRIES + 1):
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                headers=headers,
+            )
 
-        products = data.get("products") or []
-        best_product, confidence = select_best_product_match(ingredient, products)
+            if response.status_code in {429, 500, 502, 503, 504}:
+                raise requests.HTTPError(
+                    f"{response.status_code} Server Error",
+                    response=response,
+                )
 
-        if not best_product or confidence < MIN_MATCH_CONFIDENCE:
-            return None
+            response.raise_for_status()
+            data = response.json()
 
-        nutriments = best_product.get("nutriments", {})
-        standardized = standardize_nutrition(nutriments)
+            products = data.get("products") or []
+            best_product, confidence = select_best_product_match(ingredient, products)
 
-        if not standardized:
-            return None
+            if not best_product or confidence < MIN_MATCH_CONFIDENCE:
+                return None
 
-        standardized["gi"] = infer_gi(ingredient)
-        standardized["source"] = "openfoodfacts"
-        standardized["confidence"] = round(confidence, 2)
-        standardized["matched_name"] = best_product.get("product_name") or best_product.get("generic_name") or ingredient
-        return standardized
+            nutriments = best_product.get("nutriments", {})
+            standardized = standardize_nutrition(nutriments)
 
-    except Exception as exc:
-        print(f"[NUTRITION ERROR][openfoodfacts]: {exc}")
-        return None
+            if not standardized:
+                return None
+
+            standardized["gi"] = infer_gi(ingredient)
+            standardized["source"] = "openfoodfacts"
+            standardized["confidence"] = round(confidence, 2)
+            standardized["matched_name"] = (
+                best_product.get("product_name")
+                or best_product.get("generic_name")
+                or ingredient
+            )
+            return standardized
+
+        except Exception as exc:
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            error_key = (ingredient, status_code or str(exc))
+
+            if error_key not in _OPENFOODFACTS_ERROR_LOGGED:
+                _OPENFOODFACTS_ERROR_LOGGED.add(error_key)
+                print(f"[NUTRITION ERROR][openfoodfacts]: {exc}")
+
+            if attempt >= OPENFOODFACTS_RETRIES:
+                return None
+
+            time.sleep(OPENFOODFACTS_BACKOFF_SECONDS * (2 ** attempt))
 
 
 def fetch_from_usda(ingredient: str) -> dict | None:
-    """
-    Stub for future USDA integration.
-    """
+    # --- USDA FoodData Central integration (uses USDA_API_KEY) ---
+    if requests is None:
+        print("[NUTRITION ERROR][usda]: requests dependency is not installed.")
+        return None
 
-    return None
+    if not USDA_API_KEY:
+        return None
+
+    payload = {
+        "query": ingredient,
+        "pageSize": 5,
+    }
+    headers = {
+        "User-Agent": "PCOS-Meal-Planner/1.0 (local dev)",
+        "Accept": "application/json",
+    }
+
+    for attempt in range(USDA_RETRIES + 1):
+        try:
+            response = requests.post(
+                USDA_API_URL,
+                params={"api_key": USDA_API_KEY},
+                json=payload,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                headers=headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            foods = data.get("foods") or []
+            if not foods:
+                return None
+
+            best = foods[0]
+            nutrients = best.get("foodNutrients") or []
+            standardized = standardize_usda_nutrition(nutrients)
+
+            if not standardized:
+                return None
+
+            standardized["gi"] = infer_gi(ingredient)
+            standardized["source"] = "usda"
+            standardized["confidence"] = 0.75
+            standardized["matched_name"] = best.get("description") or ingredient
+            return standardized
+        except Exception as exc:
+            print(f"[NUTRITION ERROR][usda]: {exc}")
+
+            if attempt >= USDA_RETRIES:
+                return None
+
+            time.sleep(USDA_BACKOFF_SECONDS * (2 ** attempt))
 
 
 def select_best_product_match(ingredient: str, products: list[dict]) -> tuple[dict | None, float]:
@@ -185,6 +273,37 @@ def standardize_nutrition(nutriments: dict) -> dict | None:
     except Exception as exc:
         print(f"[NUTRITION ERROR][standardize]: {exc}")
         return None
+
+
+def standardize_usda_nutrition(nutrients: list[dict]) -> dict | None:
+    """
+    Map USDA FoodData Central nutrients to the app's nutrition schema.
+    Values are per 100g when provided by USDA.
+    """
+
+    name_to_value = {}
+    for item in nutrients:
+        name = str(item.get("nutrientName", "")).strip().lower()
+        value = item.get("value")
+        if name and value is not None:
+            name_to_value[name] = value
+
+    standardized = {
+        "carbs": safe_float(name_to_value.get("carbohydrate, by difference"), None),
+        "sugar": safe_float(name_to_value.get("sugars, total including nlea"), None),
+        "fiber": safe_float(name_to_value.get("fiber, total dietary"), None),
+        "protein": safe_float(name_to_value.get("protein"), None),
+        "fat": safe_float(name_to_value.get("total lipid (fat)"), None),
+    }
+
+    if standardized["carbs"] is None:
+        return None
+
+    for key, value in standardized.items():
+        if value is None:
+            standardized[key] = 0.0
+
+    return standardized
 
 
 def fallback_nutrition(ingredient: str) -> dict:

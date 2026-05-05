@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 import sys
 from pathlib import Path
@@ -12,6 +13,17 @@ from nutrition_client import get_nutrition_for_ingredients
 from recommendation_engine import build_personalized_meal_recommendation
 from normalizer import normalize_ingredients
 from rule_engine import filter_ingredients
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def parse_ingredients(raw_ingredients) -> list[str]:
