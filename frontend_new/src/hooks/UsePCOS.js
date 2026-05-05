@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { analyzeIngredients } from "../services/api";
+import { normalizeIngredients, suggestMeals } from "../services/api";
 
 const DEFAULT_PROFILE = {
   fullName: "",
@@ -30,6 +30,13 @@ function buildAnalyzePayload(input, profile) {
       activity_level: profile.activity || undefined,
       target_goal: profile.targetGoal || "maintenance",
     },
+  };
+}
+
+function buildNormalizePayload(input) {
+  return {
+    ingredients: input,
+    meal_type: "meal",
   };
 }
 
@@ -66,9 +73,21 @@ export function usePCOS() {
     setError("");
 
     try {
-      const data = await analyzeIngredients(
-        buildAnalyzePayload(trimmedInput, profile)
+      const normalized = await normalizeIngredients(
+        buildNormalizePayload(trimmedInput)
       );
+
+      if (normalized?.success === false) {
+        throw new Error(normalized.error || "Unable to normalize ingredients.");
+      }
+
+      const normalizedIngredients =
+        normalized?.data?.normalized_ingredients || [];
+
+      const data = await suggestMeals({
+        ...buildAnalyzePayload(trimmedInput, profile),
+        ingredients: normalizedIngredients,
+      });
 
       if (data?.success === false) {
         throw new Error(data.error || "Unable to generate meal suggestions.");
