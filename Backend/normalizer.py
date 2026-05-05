@@ -41,6 +41,11 @@ def normalize_ingredient(raw_ingredient: str) -> str:
     # Let the Spoonacular/Edamam API try to figure it out.
     return cleaned
 
+
+def normalize_ingredients(items: list[str]) -> list[str]:
+    """Normalizes a list of ingredient strings."""
+    return [normalize_ingredient(item) for item in items if str(item).strip()]
+
 if __name__ == "__main__":
     test_ingredients = [
         "tometo", "aloo", "cucmber", "chiken", "pyazz", "apple", "banana", "cheeni"
