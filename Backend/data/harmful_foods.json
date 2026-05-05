@@ -1,0 +1,72 @@
+{
+  "strict_avoid": [
+    "white sugar", 
+    "cheeni",
+    "vanaspati", 
+    "dalda", 
+    "margarine",
+    "instant noodles", 
+    "maggi", 
+    "yippee",
+    "biscuits", 
+    "rusk",
+    "packaged fruit juice", 
+    "rooh afza",
+    "squash",
+    "soda", 
+    "cola", 
+    "cold drink",
+    "milk chocolate",
+    "bhujia", 
+    "namkeen",
+    "refined flour",
+    "maida"
+  ],
+  "limit_or_swap": {
+    "white rice": {
+      "max_limit": {
+        "breakfast": "0g (Avoid)",
+        "lunch": "1 cup (cooked)",
+        "dinner": "1/2 cup (cooked)"
+      },
+      "swap": "brown rice, quinoa, or cauliflower rice",
+      "pcos_reason": "High glycemic index causes rapid insulin spikes. Best consumed mid-day when activity is highest. Always pair with heavy protein/fiber."
+    },
+    "potato": {
+      "max_limit": {
+        "breakfast": "1/2 medium potato",
+        "lunch": "1 medium potato",
+        "dinner": "0g (Avoid)"
+      },
+      "swap": "sweet potato, pumpkin, or raw banana (kachha kela)",
+      "pcos_reason": "High starchy carb. Sweet potatoes have a lower GI, more fiber, and stabilize blood sugar better."
+    },
+    "full-fat milk": {
+      "max_limit": {
+        "breakfast": "150ml",
+        "lunch": "100ml (best as curd/dahi)",
+        "dinner": "0ml (Avoid)"
+      },
+      "swap": "skimmed milk, almond milk, or coconut milk",
+      "pcos_reason": "Full-fat dairy contains hormones that can stimulate IGF-1, worsening PCOS acne and increasing androgen levels."
+    },
+    "mutton": {
+      "max_limit": {
+        "breakfast": "0g",
+        "lunch": "100g",
+        "dinner": "100g"
+      },
+      "swap": "chicken breast, fish, or paneer",
+      "pcos_reason": "Red meats promote inflammation which worsens PCOS. Lean meats or plant proteins are much safer."
+    },
+    "paneer": {
+      "max_limit": {
+        "breakfast": "50g",
+        "lunch": "100g",
+        "dinner": "100g"
+      },
+      "swap": "tofu (if dairy sensitive)",
+      "pcos_reason": "Excellent protein, but calorie-dense. Women with dairy-sensitive PCOS should monitor for acne breakouts."
+    }
+  }
+}
