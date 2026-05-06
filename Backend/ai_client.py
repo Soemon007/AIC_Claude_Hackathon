@@ -59,6 +59,7 @@ def generate_meal_from_ai_result(prompt: str) -> dict:
     request_id = str(uuid4())
     last_error = None
 
+    # Fast-fail on empty prompts so we do not burn provider retries.
     if not prompt or not prompt.strip():
         return {
             "success": False,
@@ -75,6 +76,7 @@ def generate_meal_from_ai_result(prompt: str) -> dict:
             },
         }
 
+    # Retry loop with exponential backoff to handle transient provider errors.
     for attempt in range(1, GEMINI_MAX_RETRIES + 1):
         started_at = time.time()
 
@@ -82,6 +84,7 @@ def generate_meal_from_ai_result(prompt: str) -> dict:
             if gemini_client is None:
                 raise RuntimeError("Gemini dependency is not installed or GEMINI_API_KEY is missing.")
 
+            # Ask the model for strict JSON so downstream parsing is deterministic.
             response = gemini_client.models.generate_content(
                 model=GEMINI_MODEL,
                 contents=[SYSTEM_PROMPT, STRICT_JSON_INSTRUCTION, prompt],
@@ -140,6 +143,7 @@ def generate_website_meal_response(prompt: str) -> dict:
     Generate a meal with AI and return a website-deliverable payload.
     """
 
+    # Pipeline: AI JSON -> normalized schema -> website-friendly payload.
     ai_result = generate_meal_from_ai_result(prompt)
 
     if not ai_result.get("success"):
@@ -156,6 +160,7 @@ def generate_website_meal_response(prompt: str) -> dict:
     except Exception as exc:
         print(f"[PARSER ERROR][request_id={ai_result['meta']['request_id']}]: {exc}")
 
+        # Retry once with an even stricter JSON reminder for better parsing odds.
         strict_prompt = f"{prompt}\n\n{STRICT_JSON_SUFFIX}"
         retry_result = generate_meal_from_ai_result(strict_prompt)
 

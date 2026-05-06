@@ -68,10 +68,12 @@ def get_nutrition_for_ingredients(ingredients: list[str]) -> dict:
     for item in ingredients:
         normalized_name = normalize_name(item)
 
+        # Cache by normalized name to avoid repeated external lookups.
         if normalized_name in CACHE:
             results[normalized_name] = CACHE[normalized_name]
             continue
 
+        # Try OpenFoodFacts -> USDA -> fallback estimates in order.
         data = (
             fetch_from_openfoodfacts(normalized_name)
             or fetch_from_usda(normalized_name)
@@ -108,6 +110,7 @@ def fetch_from_openfoodfacts(ingredient: str) -> dict | None:
         "Accept": "application/json",
     }
 
+    # Retry with backoff for transient HTTP errors or rate limits.
     for attempt in range(OPENFOODFACTS_RETRIES + 1):
         try:
             response = requests.get(
@@ -180,6 +183,7 @@ def fetch_from_usda(ingredient: str) -> dict | None:
         "Accept": "application/json",
     }
 
+    # Retry with backoff on temporary USDA failures.
     for attempt in range(USDA_RETRIES + 1):
         try:
             response = requests.post(
