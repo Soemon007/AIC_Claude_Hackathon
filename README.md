@@ -1,4 +1,4 @@
-# AIC_Claude_Hackathon
+# aic-claude-hackathon
 
 # PCOS Smart Meal Recommender
 
