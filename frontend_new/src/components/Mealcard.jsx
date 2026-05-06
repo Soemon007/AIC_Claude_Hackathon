@@ -6,6 +6,19 @@ function renderList(items, renderItem) {
   return items.map(renderItem);
 }
 
+function FeedbackRow() {
+  return (
+    <div className="feedback-row">
+      <button className="feedback-btn" type="button" aria-label="Thumbs up">
+        👍
+      </button>
+      <button className="feedback-btn" type="button" aria-label="Thumbs down">
+        👎
+      </button>
+    </div>
+  );
+}
+
 export default function MealCard({ result, error, loading }) {
   if (loading) {
     return (
@@ -40,6 +53,7 @@ export default function MealCard({ result, error, loading }) {
           <h4>Recommended Meal</h4>
           <p>{result}</p>
         </div>
+        <FeedbackRow />
       </div>
     );
   }
@@ -110,6 +124,7 @@ export default function MealCard({ result, error, loading }) {
           </div>
         )}
       </div>
+      <FeedbackRow />
     </div>
   );
 }
